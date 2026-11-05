@@ -1,0 +1,752 @@
+/* ---------- Шрифт ---------- */
+@font-face {
+  font-family: 'Stengazeta';
+  src: url('./assets/fonts/Stengazeta.ttf') format('truetype');
+  font-display: swap;
+}
+
+/* Все заголовки сайта используют этот класс */
+.red-heading {
+  font-family: 'Stengazeta', Impact, 'Arial Black', sans-serif;
+  color: #ff0000;
+  text-transform: uppercase;
+  font-weight: normal;
+  line-height: 0.9;
+  margin: 0;
+  /* тонкий чёрный контур — как обводка тушью; толщина в em → масштабируется с текстом */
+  -webkit-text-stroke: 0.014em #000;
+  paint-order: stroke fill;
+  /* белое свечение — всего 2 слоя: плотный край у букв + мягкий ореол.
+     Широкое «облако» даёт градиент ::before (он не стоит ничего), поэтому
+     большие радиусы blur не нужны. Радиусы в px (не em) — при пролёте сквозь
+     огромную надпись blur не растёт. Никаких filter/drop-shadow.
+     Тень СТАТИЧНА — нигде не анимируется; при пролёте меняются только
+     transform и opacity обёртки (.world-anchor) на GPU. */
+  text-shadow:
+    0 0 3px #fff,
+    0 0 16px #fff;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Белый ореол-облако за надписью: высветляет стену/пол позади текста.
+   Это обычный градиент (без blur) — масштабируется вместе с текстом бесплатно */
+.red-heading::before {
+  content: '';
+  position: absolute;
+  inset: -0.3em -0.35em;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 255, 255, 0.92),
+    rgba(255, 255, 255, 0.7) 45%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+/* ---------- База ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: #f2f2f2;
+  color-scheme: light;
+}
+
+body {
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* ---------- Слои сцены ----------
+   0 — коридор и двери (WebGL)
+   1 — текст «ПОРТФОЛИО» (DOM)
+   2 — аватар (WebGL, прозрачный фон) — стоит перед текстом */
+.layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* скролл/тач проходят на страницу */
+}
+
+.layer--back {
+  z-index: 0;
+  pointer-events: auto; /* клики по работам в коридоре (скролл колесом/тачем работает) */
+}
+
+.layer--text {
+  z-index: 1;
+}
+
+.layer--front {
+  z-index: 2; /* аватар — самый верхний слой */
+}
+
+/* Тень от аватара на надпись — рисуется в самой сцене (Avatar.jsx):
+   CSS drop-shadow на полноэкранном WebGL-холсте пересчитывался каждый кадр */
+
+/* ---------- Пост-эффекты: плёночный шум + виньетка ----------
+   Чистый CSS поверх всех слоёв сцены (под модалами). Шум — одна SVG-текстура
+   (растеризуется один раз), анимируется только transform → GPU, без перерисовки. */
+.fx {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+  /* виньетка: центр в фокусе, края и особенно углы — тёмные */
+  background:
+    radial-gradient(ellipse 80% 75% at 50% 48%, transparent 50%, rgba(0, 0, 0, 0.18) 75%, rgba(0, 0, 0, 0.5) 100%),
+    radial-gradient(circle at 0 0, rgba(0, 0, 0, 0.35), transparent 30%),
+    radial-gradient(circle at 100% 0, rgba(0, 0, 0, 0.35), transparent 30%),
+    radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0.35), transparent 30%),
+    radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0.35), transparent 30%);
+}
+
+.fx::before {
+  content: '';
+  position: absolute;
+  /* запас под сдвиги анимации (до ±9%) — не больше: слой композитится каждый кадр */
+  inset: -12%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1.6 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  opacity: 0.22;
+  animation: film-grain 0.6s steps(6) infinite;
+  will-change: transform;
+}
+
+@keyframes film-grain {
+  0% { transform: translate(0, 0); }
+  17% { transform: translate(-7%, 4%); }
+  33% { transform: translate(5%, -8%); }
+  50% { transform: translate(-3%, 9%); }
+  67% { transform: translate(8%, 2%); }
+  83% { transform: translate(-9%, -5%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Кто просит меньше движения — шум неподвижный */
+@media (prefers-reduced-motion: reduce) {
+  .fx::before {
+    animation: none;
+  }
+}
+
+/* Заголовки, «стоящие» в 3D: позицию и размер выставляют
+   TitleAnchor (по голове аватара) и WorldLabel (по точке в мире) */
+.world-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden; /* до первого расчёта, чтобы не мелькало */
+  /* размер (transform: scale) и прозрачность меняются на ОДНОМ GPU-слое —
+     браузер заранее растеризует надпись и дальше только композитит её */
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.hero-title,
+.section-title {
+  font-size: 4rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  /* без своего will-change: вложенный второй слой размером с огромную
+     надпись удваивал работу видеокарты при пролёте */
+}
+
+/* ---------- Контакты на стене над столом ----------
+   Тот же шрифт и красный цвет (.red-heading), но БЕЗ белого свечения и ореола —
+   только тонкая чёрная обводка для читаемости. Размер блока задаёт WorldLabel
+   (по ширине самой длинной строки — почты), поэтому на узких экранах почта
+   не обрезается: весь блок уменьшается под ширину кадра. */
+.contacts {
+  display: block;
+  width: max-content; /* ширина = самая длинная строка (её меряет WorldLabel) */
+  font-size: 4rem;
+  font-style: normal;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: none;
+  -webkit-text-stroke: 0.02em #000;
+}
+
+.contacts::before {
+  display: none; /* без белого облака */
+}
+
+.contacts__title {
+  display: block;
+  font-size: 1.45em;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.18em;
+}
+
+.contacts__line {
+  display: block;
+  line-height: 1.1;
+  text-transform: none; /* почта и ник — ровно как написаны */
+  letter-spacing: 0.02em;
+}
+
+/* Почта и Telegram — ссылки. Слой надписей клики не ловит (pointer-events: none),
+   включаем их только у этих двух строк. Колесо и свайп поверх ссылки
+   по-прежнему прокручивают страницу. Ширину строки ссылка не меняет. */
+.contacts__link {
+  width: max-content;
+  margin: 0 auto;
+  color: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* При наведении — тёмно-красный цвет и подчёркивание. Без анимации:
+   надпись перерисовывается один раз, а не каждый кадр перехода */
+.contacts__link:hover,
+.contacts__link:focus-visible {
+  color: #b80000;
+  text-decoration: underline;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.12em;
+  outline: none;
+}
+
+/* Подсказка «Почта скопирована» — внизу по центру, поверх сцены */
+.copy-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  z-index: 9000;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  background: #000;
+  color: #fff;
+  font: 600 14px/1.3 system-ui, 'Segoe UI', Roboto, sans-serif;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.copy-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---------- Страница 404 ----------
+   Фон — ровно цвет фона картинки (#FFFFFE), границ картинки не видно.
+   Все размеры — от ширины аватара --a: цифры, отступы и подпись
+   масштабируются вместе, композиция «4 аватар 4» всегда помещается.
+   Ширина композиции ≈ 1.9 × --a, поэтому --a ≤ 46vw (с полями по бокам);
+   по высоте ≤ 42vh — в альбомной ориентации телефона влезают и текст, и кнопка. */
+.not-found {
+  --bg: #fffffe;
+  --a: clamp(120px, min(46vw, 42vh), 360px);
+  position: fixed;
+  inset: 0;
+  overflow-y: auto; /* на очень низких экранах — прокрутка, а не обрезка */
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--bg);
+  color: #000;
+}
+
+.not-found__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 100%;
+}
+
+.not-found__code {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.not-found__avatar {
+  display: block;
+  width: var(--a);
+  height: auto;
+  aspect-ratio: 1;
+  flex: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.not-found__digit {
+  /* высота цифры ≈ 0.66 высоты аватара — в масштабе головы с волосами */
+  font-size: calc(var(--a) * 0.95);
+  line-height: 1;
+  flex: none;
+  /* у картинки белые поля по бокам — цифры подходят ближе, симметрично */
+  margin-inline: calc(var(--a) * -0.05);
+  /* на белом фоне белое свечение не нужно — только обводка */
+  text-shadow: none;
+}
+
+.not-found__digit::before {
+  display: none;
+}
+
+.not-found__text {
+  margin: clamp(8px, 2vmin, 20px) 0 0;
+  max-width: 28ch;
+  font-family: 'Stengazeta', Impact, 'Arial Black', sans-serif;
+  font-size: clamp(18px, 2.4vmin + 8px, 30px);
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+
+.not-found__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px; /* удобно нажимать пальцем */
+  margin-top: clamp(16px, 3vmin, 28px);
+  padding: 10px 24px;
+  border: 2px solid #000;
+  background: #fff;
+  color: #000;
+  font: 600 clamp(15px, 0.8vmin + 12px, 18px) / 1.2 system-ui, 'Segoe UI', Roboto, sans-serif;
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.not-found__button:hover,
+.not-found__button:focus-visible {
+  background: #ff0000;
+  border-color: #ff0000;
+  color: #fff;
+  outline: none;
+}
+
+/* ---------- Экран загрузки ----------
+   Белый фон, аватар по центру, под ним линия загрузки и подпись.
+   Все размеры через clamp()/vmin: на узком телефоне и в альбомной
+   ориентации (мало высоты) всё уменьшается и помещается в экран. */
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 20000; /* поверх сцены, шума и модалов */
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #fff;
+  opacity: 1;
+  transition: opacity 0.8s ease;
+}
+
+.preloader.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.preloader__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* ширина блока = ширина линии; не шире экрана с полями */
+  width: clamp(160px, 62vw, 300px);
+  max-width: 100%;
+}
+
+.preloader__avatar {
+  display: block;
+  /* vmin — по меньшей стороне экрана: в альбомной ориентации телефона
+     аватар уменьшается по высоте и не выталкивает линию за край */
+  width: clamp(110px, 34vmin, 260px);
+  height: auto;
+  aspect-ratio: 1;
+  margin-bottom: clamp(10px, 3vmin, 24px);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Овальная рамка с тонкой чёрной обводкой; внутри — чёрная полоса */
+.preloader__bar {
+  width: 100%;
+  height: clamp(10px, 1.6vmin, 14px);
+  padding: 2px;
+  border: 1.5px solid #000;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.preloader__fill {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 999px;
+  /* заполнение — через transform (видеокарта, без перерисовки) */
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 0.45s ease-out;
+  will-change: transform;
+}
+
+.preloader__text {
+  margin: clamp(8px, 2vmin, 14px) 0 0;
+  font-family: 'Stengazeta', Impact, 'Arial Black', sans-serif;
+  font-size: clamp(14px, 1.2vmin + 10px, 20px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #000;
+  white-space: nowrap;
+}
+
+.preloader__percent {
+  display: inline-block;
+  min-width: 3.2em; /* цифры меняются — подпись не «прыгает» */
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preloader__fill {
+    transition: none;
+  }
+}
+
+/* ---------- Модал с работой ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  animation: modal-in 0.2s ease-out;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.modal__stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none; /* щипок и сдвиг обрабатываем сами */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.modal__img {
+  display: block;
+  max-width: min(92vw, 1100px);
+  max-height: 88vh;
+  max-height: 88dvh;
+  object-fit: contain;
+  transform-origin: center center;
+  /* без will-change: браузер перерисовывает картинку в чётком качестве при зуме */
+  cursor: zoom-in;
+  box-shadow: 0 2vh 6vh rgba(0, 0, 0, 0.5);
+  -webkit-user-drag: none;
+}
+
+.modal__close {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: calc(env(safe-area-inset-right, 0px) + 16px);
+  z-index: 10000;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid #000;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+}
+
+.modal__close:hover,
+.modal__close:focus-visible {
+  background: #ff0000;
+  color: #fff;
+  border-color: #ff0000;
+  outline: none;
+}
+
+.modal__hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 12px;
+  max-width: calc(100vw - 32px);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ---------- Модал документа (журнал, брендбук, медиакит) ---------- */
+.doc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  animation: modal-in 0.2s ease-out;
+}
+
+/* Панель: шапка / страница (прокрутка) / подвал — друг друга не перекрывают */
+.doc-modal__panel {
+  width: min(95vw, 1200px);
+  height: 95vh;
+  height: 95dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #f2f2f2;
+  border: 2px solid #000;
+  overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .doc-modal__panel {
+    height: 92vh;
+    height: 92dvh;
+  }
+}
+
+.doc-modal__header,
+.doc-modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.doc-modal__header {
+  border-bottom: 2px solid #000;
+  padding-right: 72px; /* место под фиксированный крестик */
+}
+
+.doc-modal__footer {
+  justify-content: space-between;
+  border-top: 2px solid #000;
+}
+
+.doc-modal__title {
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.doc-modal__zoom {
+  display: flex;
+  flex: none;
+}
+
+.doc-modal button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.doc-modal__zoom button,
+.doc-modal__nav {
+  min-width: 44px;
+  height: 44px; /* удобно нажимать пальцем */
+  padding: 0 12px;
+  border: 2px solid #000;
+  background: #fff;
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.doc-modal__zoom button + button {
+  border-left: none;
+}
+
+.doc-modal__zoom-value {
+  min-width: 64px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.doc-modal__zoom button:hover:not(:disabled),
+.doc-modal__nav:hover:not(:disabled),
+.doc-modal__zoom button:focus-visible,
+.doc-modal__nav:focus-visible {
+  background: #ff0000;
+  border-color: #ff0000;
+  color: #fff;
+  outline: none;
+}
+
+.doc-modal button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doc-modal__counter {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Область страницы: прокручивается, пальцем — прокрутка, щипок — зум (в JS) */
+.doc-modal__body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.doc-modal__body.is-zoomed {
+  cursor: grab;
+}
+
+.doc-modal__body.is-zoomed:active {
+  cursor: grabbing;
+}
+
+/* Центрирует страницу, пока она меньше области; при зуме — растёт и прокручивается */
+.doc-modal__sheet {
+  min-width: 100%;
+  min-height: 100%;
+  width: max-content;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+}
+
+.doc-modal__sheet img {
+  display: block;
+  max-width: none;
+  background: #fff;
+  box-shadow: 0 1vh 3vh rgba(0, 0, 0, 0.25);
+  -webkit-user-drag: none;
+}
+
+.doc-modal__sheet img.is-loading {
+  opacity: 0.4;
+}
+
+@media (max-width: 480px) {
+  .doc-modal__header,
+  .doc-modal__footer {
+    padding: 8px;
+    gap: 8px;
+  }
+  .doc-modal__header {
+    padding-right: 64px;
+  }
+  .doc-modal__nav {
+    padding: 0 10px;
+    font-size: 15px;
+  }
+  .doc-modal__zoom-value {
+    min-width: 56px !important;
+  }
+}
+
+/* Подсказка: для мыши и для тача — своя */
+.modal__hint-touch {
+  display: none;
+}
+
+/* Кнопки: тап срабатывает сразу (без задержки и без зума страницы по двойному тапу) */
+.modal__close,
+.doc-modal button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Крестик: невидимая зона нажатия шире самой кнопки — попасть пальцем легко */
+.modal__close::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .modal__hint-mouse {
+    display: none;
+  }
+  .modal__hint-touch {
+    display: inline;
+  }
+
+  /* Тач-экраны: кнопки крупнее (рекомендуемый минимум для пальца — 48 px) */
+  .modal__close {
+    width: 56px;
+    height: 56px;
+  }
+  .modal__close svg {
+    width: 28px;
+    height: 28px;
+  }
+  .doc-modal__header {
+    padding-right: 84px; /* место под крупный крестик */
+  }
+  .doc-modal__zoom button,
+  .doc-modal__nav {
+    min-width: 48px;
+    height: 48px;
+  }
+}
+
+/* Телефон в альбомной ориентации: по высоте мало места — шапка/подвал компактнее,
+   панель на весь экран, чтобы страница документа не сжималась в полоску */
+@media (orientation: landscape) and (max-height: 500px) {
+  .doc-modal__panel {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border: none;
+  }
+  .doc-modal__header,
+  .doc-modal__footer {
+    padding: 4px 8px;
+  }
+  .doc-modal__header {
+    padding-right: 76px;
+  }
+  .doc-modal__title {
+    font-size: 1.3rem;
+  }
+  .modal__close {
+    top: calc(env(safe-area-inset-top, 0px) + 4px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
+  }
+  .modal__img {
+    max-height: 80vh;
+    max-height: 80dvh;
+  }
+}
+
+/* Высота трека = длина скролла по коридору (точное значение задаёт App из траектории камеры) */
+.scroll-track {
+  height: 1500vh;
+}
